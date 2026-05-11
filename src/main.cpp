@@ -208,12 +208,11 @@ void onMouseAxis(const IPointer::SAxisEvent& e, Event::SCallbackInfo& info) {
 
 }
 
-// event hook for swipe
 void onSwipeBegin(const IPointer::SSwipeBeginEvent& e, Event::SCallbackInfo& info) {
 
     if (Config::disableGestures) return;
 
-    const auto widget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
+    const auto widget = getWidgetForMonitor(g_pCompositor->m_pLastMonitor);
     if (widget != nullptr)
         widget->beginSwipe(e);
 
@@ -232,7 +231,7 @@ void onSwipeUpdate(const IPointer::SSwipeUpdateEvent& e, Event::SCallbackInfo& i
 
     if (Config::disableGestures) return;
 
-    const auto widget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
+    const auto widget = getWidgetForMonitor(g_pCompositor->m_pLastMonitor);
     if (widget != nullptr)
         info.cancelled = !widget->updateSwipe(e);
 }
@@ -242,7 +241,7 @@ void onSwipeEnd(const IPointer::SSwipeEndEvent& e, Event::SCallbackInfo& info) {
 
     if (Config::disableGestures) return;
 
-    const auto widget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
+    const auto widget = getWidgetForMonitor(g_pCompositor->m_pLastMonitor);
     if (widget != nullptr)
         widget->endSwipe(e);
 }
