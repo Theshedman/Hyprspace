@@ -526,10 +526,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     g_pConfigReloadHook = Event::bus()->m_events.config.reloaded.listen([]() { reloadConfig(); });
     g_pConfigManager->tick();
 
-    // moved dispatch registration from HyprlandAPI over to global KeybindManager instance
-    g_pKeybindManager->addDispatcher("overview:toggle", ::dispatchToggleOverview);
-    g_pKeybindManager->addDispatcher("overview:open", ::dispatchOpenOverview);
-    g_pKeybindManager->addDispatcher("overview:close", ::dispatchCloseOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:toggle", ::dispatchToggleOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:open", ::dispatchOpenOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:close", ::dispatchCloseOverview);
 
     g_pRenderHook = Event::bus()->m_events.render.stage.listen([](eRenderStage stage) { onRender(stage); });
 
@@ -567,11 +566,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
-    // safely clean custom bindings from KeybindManager tracking on unload
-    g_pKeybindManager->removeDispatcher("overview:toggle");
-    g_pKeybindManager->removeDispatcher("overview:open");
-    g_pKeybindManager->removeDispatcher("overview:close");
-
     g_pRenderHook.reset();
     g_pConfigReloadHook.reset();
     g_pOpenLayerHook.reset();
