@@ -3,8 +3,8 @@
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/config/shared/workspace/WorkspaceRuleManager.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
+#include <hyprland/src/Compositor.hpp>
 
-// Update the return type to include the Config:: namespace wrapper
 static Config::CWorkspaceRule getRuleForWorkspace(PHLWORKSPACE pWorkspace) {
     if (!pWorkspace) 
         return Config::CWorkspaceRule{};
@@ -14,9 +14,6 @@ static Config::CWorkspaceRule getRuleForWorkspace(PHLWORKSPACE pWorkspace) {
     return optRule.has_value() ? optRule.value() : Config::CWorkspaceRule{};
 }
 
-
-
-
 void CHyprspaceWidget::updateLayout() {
     if (!Config::affectStrut) return;
 
@@ -25,11 +22,12 @@ void CHyprspaceWidget::updateLayout() {
 
     const auto currentHeight = Config::panelHeight + Config::reservedArea;
 
-    static auto PGAPSINDATA = CConfigValue<Hyprlang::CUSTOMTYPE>("general:gaps_in");
-    static auto PGAPSOUTDATA = CConfigValue<Hyprlang::CUSTOMTYPE>("general:gaps_out");
-    
-    auto* const PGAPSIN = (Config::CCssGapData*)(PGAPSINDATA.ptr())->getData();
-    auto* const PGAPSOUT = (Config::CCssGapData*)(PGAPSOUTDATA.ptr())->getData();
+    // FIX: Safely retrieve layout integers without breaking on null custom pointers
+    static auto PGAPSIN_VALUE = CConfigValue<Hyprlang::INT>("general:gaps_in");
+    static auto PGAPSOUT_VALUE = CConfigValue<Hyprlang::INT>("general:gaps_out");
+
+    const std::string standardGapsIn = std::to_string(*PGAPSIN_VALUE);
+    const std::string standardGapsOut = std::to_string(*PGAPSOUT_VALUE);
 
     if (active) {
         if (!Config::onBottom)
@@ -47,16 +45,17 @@ void CHyprspaceWidget::updateLayout() {
         if (!oActiveWorkspace) return;
 
         for (auto& wsRef : g_pCompositor->getWorkspaces()) {
-            auto ws = wsRef.lock();
-            if (ws && ws->m_monitor && ws->m_monitor->m_id == ownerID && ws != oActiveWorkspace) {
-                const auto rule = getRuleForWorkspace(ws);
-                
-                std::string gapsInStr = rule.m_gapsIn.has_value() ? rule.m_gapsIn->toString() : PGAPSIN->toString();
-                std::string gapsOutStr = rule.m_gapsOut.has_value() ? rule.m_gapsOut->toString() : PGAPSOUT->toString();
+            auto pWs = wsRef.lock();
+            if (!pWs || g_pCompositor->getWorkspaceByID(pWs->m_id) != pWs) continue;
 
-                const auto curRules = std::to_string(ws->m_id) + " gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
+            if (pWs->monitorID() == ownerID && pWs != oActiveWorkspace) {
+                const auto rule = getRuleForWorkspace(pWs);
+                
+                std::string gapsInStr = rule.m_gapsIn.has_value() ? rule.m_gapsIn->toString() : standardGapsIn;
+                std::string gapsOutStr = rule.m_gapsOut.has_value() ? rule.m_gapsOut->toString() : standardGapsOut;
+
+                const auto curRules = std::to_string(pWs->m_id) + " gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
                 if (Config::overrideGaps) {
-                    // Use the safe public plugin utility to execute commands down the runtime pipeline
                     HyprlandAPI::invokeHyprctlCommand("keyword", "workspace " + curRules);
                 }
             }
@@ -75,14 +74,15 @@ void CHyprspaceWidget::updateLayout() {
     }
     else {
         for (auto& wsRef : g_pCompositor->getWorkspaces()) {
-            auto ws = wsRef.lock();
+            auto pWs = wsRef.lock();
+            if (!pWs || g_pCompositor->getWorkspaceByID(pWs->m_id) != pWs) continue;
 
-            if (ws && ws->m_monitor && ws->m_monitor->m_id == ownerID) {
-                const auto rule = getRuleForWorkspace(ws);
-                std::string gapsInStr = rule.m_gapsIn.has_value() ? rule.m_gapsIn->toString() : PGAPSIN->toString();
-                std::string gapsOutStr = rule.m_gapsOut.has_value() ? rule.m_gapsOut->toString() : PGAPSOUT->toString();
+            if (pWs->monitorID() == ownerID) {
+                const auto rule = getRuleForWorkspace(pWs);
+                std::string gapsInStr = rule.m_gapsIn.has_value() ? rule.m_gapsIn->toString() : standardGapsIn;
+                std::string gapsOutStr = rule.m_gapsOut.has_value() ? rule.m_gapsOut->toString() : standardGapsOut;
 
-                const auto curRules = std::to_string(ws->m_id) + " gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
+                const auto curRules = std::to_string(pWs->m_id) + " gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
                 if (Config::overrideGaps) {
                     HyprlandAPI::invokeHyprctlCommand("keyword", "workspace " + curRules);
                 }

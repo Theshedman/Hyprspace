@@ -33,14 +33,20 @@ void CHyprspaceWidget::show() {
 
     if (prevFullscreen.empty()) {
         // unfullscreen all windows
-        for (auto& ws : g_pCompositor->getWorkspaces()) {
-            if (ws->m_monitor->m_id == ownerID) {
-                const auto w = ws->getFullscreenWindow();
-                if (w != nullptr && ws->m_fullscreenMode != FSMODE_NONE) {
+        for (auto& wsRef : g_pCompositor->getWorkspaces()) {
+            auto pWs = wsRef.lock();
+            // Validate the workspace pointer is active and registered in the compositor map
+            if (!pWs || g_pCompositor->getWorkspaceByID(pWs->m_id) != pWs) 
+                continue;
+
+            // Use pWs safely below this line
+            if (pWs->monitorID() == ownerID) {
+                const auto w = pWs->getFullscreenWindow();
+                if (w != nullptr && pWs->m_fullscreenMode != FSMODE_NONE) {
                     // use fakefullscreenstate to preserve client's internal state
                     // fixes youtube fullscreen not restoring properly
-                    if (ws->m_fullscreenMode == FSMODE_FULLSCREEN) w->m_wantsInitialFullscreen = true;
-                    prevFullscreen.emplace_back(std::make_tuple(PHLWINDOWREF(w), ws->m_fullscreenMode));
+                    if (pWs->m_fullscreenMode == FSMODE_FULLSCREEN) w->m_wantsInitialFullscreen = true;
+                    prevFullscreen.emplace_back(std::make_tuple(PHLWINDOWREF(w), pWs->m_fullscreenMode));
                     g_pCompositor->setWindowFullscreenState(w, Desktop::View::SFullscreenState{.internal = FSMODE_NONE, .client = FSMODE_NONE});
                 }
             }

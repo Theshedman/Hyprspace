@@ -622,6 +622,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     registerMonitors();
     g_pAddMonitorHook = Event::bus()->m_events.monitor.added.listen([](const PHLMONITOR&) { registerMonitors(); });
 
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:toggle", ::dispatchToggleOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:open", ::dispatchOpenOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:close", ::dispatchCloseOverview);
+
     return {"Hyprspace", "Workspace overview", "KZdkm", "0.1"};
 }
 
