@@ -1,6 +1,31 @@
 #include "Overview.hpp"
 #include "Globals.hpp"
+#include <hyprland/src/config/ConfigManager.hpp>
+#include <hyprland/src/managers/ConfigManager.hpp>
+// Fix for member and incomplete type errors:
+#include <hyprland/src/config/shared/workspace/WorkspaceRuleManager.hpp>
 #include <hyprland/src/config/legacy/ConfigManager.hpp>
+
+// Helper to query rules via the specialized Rule Manager
+static SWorkspaceRule getRuleForWorkspace(PHLWORKSPACE pWorkspace) {
+    if (!pWorkspace) return SWorkspaceRule{};
+
+    // 1. Access the unified manager via g_pCompositor
+    auto& configMgr = g_pCompositor->m_pConfigManager;
+    
+    // 2. Query the rules directly from the manager
+    // In v0.55.0, both Lua and Legacy rules are merged into this internal list
+    const auto& rules = configMgr->getAllWorkspaceRules();
+
+    for (const auto& r : rules) {
+        // Match by workspace name or ID
+        if (r.workspaceString == pWorkspace->m_szName || r.workspaceString == std::to_string(pWorkspace->m_iID)) {
+            return r;
+        }
+    }
+
+    return SWorkspaceRule{};
+}
 
 // FIXME: preserve original workspace rules
 void CHyprspaceWidget::updateLayout() {
@@ -12,7 +37,6 @@ void CHyprspaceWidget::updateLayout() {
 
     const auto currentHeight = Config::panelHeight + Config::reservedArea;
 
-    // ensure custom types are handled through the new Hyprlang pointers safely
     static auto PGAPSINDATA = CConfigValue<Hyprlang::CUSTOMTYPE>("general:gaps_in");
     static auto PGAPSOUTDATA = CConfigValue<Hyprlang::CUSTOMTYPE>("general:gaps_out");
     
@@ -28,44 +52,60 @@ void CHyprspaceWidget::updateLayout() {
         pMonitor->m_reservedArea = Desktop::CReservedArea();
     }
 
-    g_pHyprRenderer->arrangeLayersForMonitor(pMonitor->m_id);
+    g_pHyprRenderer->arrangeLayersForMonitor(ownerID);
 
-    // gaps are created via workspace rules
-    // there are no way to write to m_dWorkspaceRules directly
-    // and we want to refrain from using function hooks
-    // so we create a workspace rule for ALL workspaces through handleWorkspaceRules
-    // Geneva Convention violation type hack but idc atm
+    // Get the Legacy manager specifically for string-based rule injection (The Hack)
+    auto legacyMgr = Config::Legacy::mgr().lock();
+    if (!legacyMgr) return;
+
     if (active) {
-        // guard against null active workspace during reload
-        const auto oActiveWorkspace = pMonitor->activeWorkspace;
+        const auto oActiveWorkspace = pMonitor->m_activeWorkspace;
         if (!oActiveWorkspace) return;
 
-        for (auto& ws : g_pCompositor->m_vWorkspaces) { 
-            if (ws && ws->m_iMonitorID == pMonitor->m_id && ws != oActiveWorkspace) {
+        for (auto& wsRef : g_pCompositor->getWorkspaces()) {
+            auto ws = wsRef.lock();
+            // v0.55.0 Fix: Use ws->m_monitor->m_id and ws->m_id
+            if (ws && ws->m_monitor->m_id == ownerID && ws != oActiveWorkspace) {
+                const auto rule = getRuleForWorkspace(ws);
                 
-                // Safety: Don't swap active workspace pointers during a layout update if they are invalid
-                const auto curRules = std::to_string(ws->m_iID) + ", gapsin:" + PGAPSIN->toString() + ", gapsout:" + PGAPSOUT->toString();
-                
+                std::string gapsInStr = rule.gapsIn.has_value() ? rule.gapsIn->toString() : PGAPSIN->toString();
+                std::string gapsOutStr = rule.gapsOut.has_value() ? rule.gapsOut->toString() : PGAPSOUT->toString();
+
+                const auto curRules = std::to_string(ws->m_id) + ", gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
                 if (Config::overrideGaps) {
-                    if (const auto legacy = Config::Legacy::mgr().lock())
-                        legacy->handleWorkspaceRules("", curRules);
+                    legacyMgr->handleWorkspaceRules("", curRules);
                 }
             }
+        }
+
+        const auto oActiveRule = getRuleForWorkspace(oActiveWorkspace);
+        std::string activeGapsIn = oActiveRule.gapsIn.has_value() ? oActiveRule.gapsIn->toString() : std::to_string(Config::gapsIn);
+        std::string activeGapsOut = oActiveRule.gapsOut.has_value() ? oActiveRule.gapsOut->toString() : std::to_string(Config::gapsOut);
+
+        const auto curRules = std::to_string(oActiveWorkspace->m_id) + ", gapsin:" + activeGapsIn + ", gapsout:" + activeGapsOut;
+        if (Config::overrideGaps) {
+            legacyMgr->handleWorkspaceRules("", curRules);
         }
         
-        // recalculate only if we have a valid monitor handle
-        g_pLayoutManager->getCurrentLayout()->recalculateMonitor(pMonitor->m_id);
+        g_layoutManager->recalculateMonitor(pMonitor);
 
-    } else {
-        for (auto& ws : g_pCompositor->m_vWorkspaces) {
-            if (ws && ws->m_iMonitorID == pMonitor->m_id) {
-                const auto curRules = std::to_string(ws->m_iID) + ", gapsin:" + PGAPSIN->toString() + ", gapsout:" + PGAPSOUT->toString();
+    }
+    else {
+        for (auto& wsRef : g_pCompositor->getWorkspaces()) {
+            auto ws = wsRef.lock();
+            if (ws && ws->m_monitor->m_id == ownerID) {
+                const auto rule = getRuleForWorkspace(ws);
+                std::string gapsInStr = rule.gapsIn.has_value() ? rule.gapsIn->toString() : PGAPSIN->toString();
+                std::string gapsOutStr = rule.gapsOut.has_value() ? rule.gapsOut->toString() : PGAPSOUT->toString();
+
+                const auto curRules = std::to_string(ws->m_id) + ", gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
                 if (Config::overrideGaps) {
-                    if (const auto legacy = Config::Legacy::mgr().lock())
-                        legacy->handleWorkspaceRules("", curRules);
+                    legacyMgr->handleWorkspaceRules("", curRules);
                 }
             }
         }
-        g_pLayoutManager->getCurrentLayout()->recalculateMonitor(pMonitor->m_id);
+        g_layoutManager->recalculateMonitor(pMonitor);
     }
+
+    g_pHyprRenderer->damageMonitor(pMonitor);
 }

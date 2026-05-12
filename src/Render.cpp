@@ -43,8 +43,8 @@ void renderWindowStub(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORKSPACE pWork
 
     const auto oWorkspace = pWindow->m_workspace;
     const auto oFullscreen = pWindow->m_fullscreenState;
-    const auto oRealPosition = pWindow->m_realPosition->value();
-    const auto oSize = pWindow->m_realSize->value();
+    const auto oRealPosition = pWindow->m_position;
+    const auto oSize = pWindow->m_size;
     const auto oUseNearestNeighbor = pWindow->m_ruleApplicator->nearestNeighbor();
     const auto oPinned = pWindow->m_pinned;
     const auto oFloating = pWindow->m_isFloating;
@@ -88,8 +88,8 @@ void renderLayerStub(PHLLS pLayer, PHLMONITOR pMonitor, CBox rectOverride, const
 
     if (!pLayer->m_mapped || pLayer->m_readyToDelete || !pLayer->m_layerSurface) return;
 
-    Vector2D oRealPosition = pLayer->m_realPosition->value();
-    Vector2D oSize = pLayer->m_realSize->value();
+    Vector2D oRealPosition = pLayer->m_position;
+    Vector2D oSize = pLayer->m_size;
     float oAlpha = pLayer->m_alpha->value(); // set to 1 to show hidden top layer
     const auto oFadingOut = pLayer->m_fadingOut;
 
@@ -268,13 +268,13 @@ void CHyprspaceWidget::draw() {
         // background and bottom layers
         if (!Config::hideBackgroundLayers) {
             for (auto& ls : owner->m_layerSurfaceLayers[0]) {
-                CBox layerBox = {curWorkspaceBox.pos() + (ls->m_realPosition->value() - owner->m_position) * monitorSizeScaleFactor, ls->m_realSize->value() * monitorSizeScaleFactor};
+                CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_size * monitorSizeScaleFactor};
                 g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
                 renderLayerStub(ls.lock(), owner, layerBox, time);
                 g_pHyprRenderer->m_renderData.clipBox = monitorClip;
             }
             for (auto& ls : owner->m_layerSurfaceLayers[1]) {
-                CBox layerBox = {curWorkspaceBox.pos() + (ls->m_realPosition->value() - owner->m_position) * monitorSizeScaleFactor, ls->m_realSize->value() * monitorSizeScaleFactor};
+                CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_size * monitorSizeScaleFactor};
                 g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
                 renderLayerStub(ls.lock(), owner, layerBox, time);
                 g_pHyprRenderer->m_renderData.clipBox = monitorClip;
@@ -301,10 +301,10 @@ void CHyprspaceWidget::draw() {
             for (auto& w : g_pCompositor->m_windows) {
                 if (!w) continue;
                 if (w->m_workspace == ws && !w->m_isFloating) {
-                    double wX = curWorkspaceRectOffsetX + ((w->m_realPosition->value().x - owner->m_position.x) * monitorSizeScaleFactor * owner->m_scale);
-                    double wY = curWorkspaceRectOffsetY + ((w->m_realPosition->value().y - owner->m_position.y) * monitorSizeScaleFactor * owner->m_scale);
-                    double wW = w->m_realSize->value().x * monitorSizeScaleFactor * owner->m_scale;
-                    double wH = w->m_realSize->value().y * monitorSizeScaleFactor * owner->m_scale;
+                    double wX = curWorkspaceRectOffsetX + ((w->m_position.x - owner->m_position.x) * monitorSizeScaleFactor * owner->m_scale);
+                    double wY = curWorkspaceRectOffsetY + ((w->m_position.y - owner->m_position.y) * monitorSizeScaleFactor * owner->m_scale);
+                    double wW = w->m_size.x * monitorSizeScaleFactor * owner->m_scale;
+                    double wH = w->m_size.y * monitorSizeScaleFactor * owner->m_scale;
                     if (!(wW > 0 && wH > 0)) continue;
                     CBox curWindowBox = {wX, wY, wW, wH};
                     g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
@@ -317,10 +317,10 @@ void CHyprspaceWidget::draw() {
             for (auto& w : g_pCompositor->m_windows) {
                 if (!w) continue;
                 if (w->m_workspace == ws && w->m_isFloating && ws->getLastFocusedWindow() != w) {
-                    double wX = curWorkspaceRectOffsetX + ((w->m_realPosition->value().x - owner->m_position.x) * monitorSizeScaleFactor * owner->m_scale);
-                    double wY = curWorkspaceRectOffsetY + ((w->m_realPosition->value().y - owner->m_position.y) * monitorSizeScaleFactor * owner->m_scale);
-                    double wW = w->m_realSize->value().x * monitorSizeScaleFactor * owner->m_scale;
-                    double wH = w->m_realSize->value().y * monitorSizeScaleFactor * owner->m_scale;
+                    double wX = curWorkspaceRectOffsetX + ((w->m_position.x - owner->m_position.x) * monitorSizeScaleFactor * owner->m_scale);
+                    double wY = curWorkspaceRectOffsetY + ((w->m_position.y - owner->m_position.y) * monitorSizeScaleFactor * owner->m_scale);
+                    double wW = w->m_size.x * monitorSizeScaleFactor * owner->m_scale;
+                    double wH = w->m_size.y * monitorSizeScaleFactor * owner->m_scale;
                     if (!(wW > 0 && wH > 0)) continue;
                     CBox curWindowBox = {wX, wY, wW, wH};
                     g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
@@ -333,10 +333,10 @@ void CHyprspaceWidget::draw() {
             if (ws->getLastFocusedWindow())
                 if (ws->getLastFocusedWindow()->m_isFloating) {
                     const auto w = ws->getLastFocusedWindow();
-                    double wX = curWorkspaceRectOffsetX + ((w->m_realPosition->value().x - owner->m_position.x) * monitorSizeScaleFactor * owner->m_scale);
-                    double wY = curWorkspaceRectOffsetY + ((w->m_realPosition->value().y - owner->m_position.y) * monitorSizeScaleFactor * owner->m_scale);
-                    double wW = w->m_realSize->value().x * monitorSizeScaleFactor * owner->m_scale;
-                    double wH = w->m_realSize->value().y * monitorSizeScaleFactor * owner->m_scale;
+                    double wX = curWorkspaceRectOffsetX + ((w->m_position.x - owner->m_position.x) * monitorSizeScaleFactor * owner->m_scale);
+                    double wY = curWorkspaceRectOffsetY + ((w->m_position.y - owner->m_position.y) * monitorSizeScaleFactor * owner->m_scale);
+                    double wW = w->m_size.x * monitorSizeScaleFactor * owner->m_scale;
+                    double wH = w->m_size.y * monitorSizeScaleFactor * owner->m_scale;
                     if (!(wW > 0 && wH > 0)) continue;
                     CBox curWindowBox = {wX, wY, wW, wH};
                     g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
@@ -350,7 +350,7 @@ void CHyprspaceWidget::draw() {
             // this layer is hidden for real workspace when panel is displayed
             if (!Config::hideTopLayers)
                 for (auto& ls : owner->m_layerSurfaceLayers[2]) {
-                    CBox layerBox = {curWorkspaceBox.pos() + (ls->m_realPosition->value() - owner->m_position) * monitorSizeScaleFactor, ls->m_realSize->value() * monitorSizeScaleFactor};
+                    CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_size * monitorSizeScaleFactor};
                     g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
                     renderLayerStub(ls.lock(), owner, layerBox, time);
                     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
@@ -358,7 +358,7 @@ void CHyprspaceWidget::draw() {
 
             if (!Config::hideOverlayLayers)
                 for (auto& ls : owner->m_layerSurfaceLayers[3]) {
-                    CBox layerBox = {curWorkspaceBox.pos() + (ls->m_realPosition->value() - owner->m_position) * monitorSizeScaleFactor, ls->m_realSize->value() * monitorSizeScaleFactor};
+                    CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_size * monitorSizeScaleFactor};
                     g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
                     renderLayerStub(ls.lock(), owner, layerBox, time);
                     g_pHyprRenderer->m_renderData.clipBox = monitorClip;

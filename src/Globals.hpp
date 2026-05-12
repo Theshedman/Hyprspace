@@ -88,3 +88,11 @@ namespace Config {
 }
 
 extern int numWorkspaces;
+
+namespace ConfigPtr {
+    inline SP<Config::Values::IValue> panelColor, panelBorderColor, workspaceActiveBackground, workspaceInactiveBackground, workspaceActiveBorder, workspaceInactiveBorder;
+    inline SP<Config::Values::IValue> panelHeight, panelBorderWidth, workspaceMargin, reservedArea, workspaceBorderSize, adaptiveHeight, centerAligned, onBottom, hideBackgroundLayers, hideTopLayers, hideOverlayLayers, drawActiveWorkspace, hideRealLayers, affectStrut;
+    inline SP<Config::Values::IValue> overrideGaps, gapsIn, gapsOut;
+    inline SP<Config::Values::IValue> autoDrag, autoScroll, exitOnClick, switchOnDrop, exitOnSwitch, showNewWorkspace, showEmptyWorkspace, showSpecialWorkspace;
+    inline SP<Config::Values::IValue> disableGestures, reverseSwipe, disableBlur, overrideAnimSpeed, dragAlpha, exitKey;
+}
