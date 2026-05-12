@@ -48,8 +48,7 @@ void CHyprspaceWidget::updateLayout() {
 
         for (auto& wsRef : g_pCompositor->getWorkspaces()) {
             auto ws = wsRef.lock();
-            // v0.55.0 Fix: Use unified structural naming
-            if (ws && ws->m_monitor->m_id == ownerID && ws != oActiveWorkspace) {
+            if (ws && ws->m_monitor && ws->m_monitor->m_id == ownerID && ws != oActiveWorkspace) {
                 const auto rule = getRuleForWorkspace(ws);
                 
                 std::string gapsInStr = rule.m_gapsIn.has_value() ? rule.m_gapsIn->toString() : PGAPSIN->toString();
@@ -77,7 +76,8 @@ void CHyprspaceWidget::updateLayout() {
     else {
         for (auto& wsRef : g_pCompositor->getWorkspaces()) {
             auto ws = wsRef.lock();
-            if (ws && ws->m_monitor->m_id == ownerID) {
+
+            if (ws && ws->m_monitor && ws->m_monitor->m_id == ownerID) {
                 const auto rule = getRuleForWorkspace(ws);
                 std::string gapsInStr = rule.m_gapsIn.has_value() ? rule.m_gapsIn->toString() : PGAPSIN->toString();
                 std::string gapsOutStr = rule.m_gapsOut.has_value() ? rule.m_gapsOut->toString() : PGAPSOUT->toString();
