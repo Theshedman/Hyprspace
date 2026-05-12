@@ -55,14 +55,14 @@
           inherit version;
           src = ./.;
 
-          nativeBuildInputs = hyprlandPkg.nativeBuildInputs;
-          buildInputs = [hyprlandPkg] ++ hyprlandPkg.buildInputs;
+          nativeBuildInputs = with pkgs; [ meson ninja pkg-config ] ++ hyprlandPkg.nativeBuildInputs;
+          buildInputs = [ hyprlandPkg ] ++ hyprlandPkg.buildInputs;
+
           dontUseCmakeConfigure = true;
 
-          installFlags = ["PREFIX=$(out)"];
-
           postInstall = ''
-            mv $out/lib/Hyprspace.so $out/lib/libHyprspace.so
+            mkdir -p $out/lib
+            [ -f $out/lib/Hyprspace.so ] && mv $out/lib/Hyprspace.so $out/lib/libHyprspace.so || true
           '';
 
           meta = with pkgs.lib; {

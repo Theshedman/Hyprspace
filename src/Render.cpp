@@ -89,7 +89,7 @@ void renderLayerStub(PHLLS pLayer, PHLMONITOR pMonitor, CBox rectOverride, const
     if (!pLayer->m_mapped || pLayer->m_readyToDelete || !pLayer->m_layerSurface) return;
 
     Vector2D oRealPosition = pLayer->m_position;
-    Vector2D oSize = pLayer->m_size;
+    Vector2D oSize = pLayer->m_geometry.size();
     float oAlpha = pLayer->m_alpha->value(); // set to 1 to show hidden top layer
     const auto oFadingOut = pLayer->m_fadingOut;
 
@@ -268,13 +268,24 @@ void CHyprspaceWidget::draw() {
         // background and bottom layers
         if (!Config::hideBackgroundLayers) {
             for (auto& ls : owner->m_layerSurfaceLayers[0]) {
-                CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_size * monitorSizeScaleFactor};
+                // Explicitly wrap the math or ensure scale factors match 
+                // If monitorSizeScaleFactor is a Vector2D, you may need component access (.x, .y) or explicit conversion
+                CBox layerBox = {
+                    curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, 
+                    ls->m_geometry.size() * monitorSizeScaleFactor
+                };
                 g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
                 renderLayerStub(ls.lock(), owner, layerBox, time);
                 g_pHyprRenderer->m_renderData.clipBox = monitorClip;
             }
             for (auto& ls : owner->m_layerSurfaceLayers[1]) {
-                CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_size * monitorSizeScaleFactor};
+                // Explicitly wrap the math or ensure scale factors match 
+                // If monitorSizeScaleFactor is a Vector2D, you may need component access (.x, .y) or explicit conversion
+                CBox layerBox = {
+                    curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, 
+                    ls->m_geometry.size() * monitorSizeScaleFactor
+                };
+
                 g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
                 renderLayerStub(ls.lock(), owner, layerBox, time);
                 g_pHyprRenderer->m_renderData.clipBox = monitorClip;
@@ -283,7 +294,10 @@ void CHyprspaceWidget::draw() {
 
         // the mini panel to cover the awkward empty space reserved by the panel
         if (owner->m_activeWorkspace == ws && Config::affectStrut) {
-            CBox miniPanelBox = {curWorkspaceRectOffsetX, curWorkspaceRectOffsetY, widgetBox.w * monitorSizeScaleFactor, widgetBox.h * monitorSizeScaleFactor};
+            Vector2D panelPos  = {curWorkspaceRectOffsetX, curWorkspaceRectOffsetY};
+            Vector2D panelSize = {widgetBox.w * monitorSizeScaleFactor, widgetBox.h * monitorSizeScaleFactor};
+
+            CBox miniPanelBox = {panelPos, panelSize};
             if (Config::onBottom) miniPanelBox = {curWorkspaceRectOffsetX, curWorkspaceRectOffsetY + workspaceBoxH - widgetBox.h * monitorSizeScaleFactor, widgetBox.w * monitorSizeScaleFactor, widgetBox.h * monitorSizeScaleFactor};
 
             if (!Config::disableBlur) {
@@ -350,7 +364,7 @@ void CHyprspaceWidget::draw() {
             // this layer is hidden for real workspace when panel is displayed
             if (!Config::hideTopLayers)
                 for (auto& ls : owner->m_layerSurfaceLayers[2]) {
-                    CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_size * monitorSizeScaleFactor};
+                    CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_geometry.size() * monitorSizeScaleFactor};
                     g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
                     renderLayerStub(ls.lock(), owner, layerBox, time);
                     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
@@ -358,7 +372,7 @@ void CHyprspaceWidget::draw() {
 
             if (!Config::hideOverlayLayers)
                 for (auto& ls : owner->m_layerSurfaceLayers[3]) {
-                    CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_size * monitorSizeScaleFactor};
+                    CBox layerBox = {curWorkspaceBox.pos() + (ls->m_position - owner->m_position) * monitorSizeScaleFactor, ls->m_geometry.size() * monitorSizeScaleFactor};
                     g_pHyprRenderer->m_renderData.clipBox = curWorkspaceBox;
                     renderLayerStub(ls.lock(), owner, layerBox, time);
                     g_pHyprRenderer->m_renderData.clipBox = monitorClip;

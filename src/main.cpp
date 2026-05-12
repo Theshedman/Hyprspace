@@ -1,3 +1,5 @@
+#include <expected>
+
 #include <hyprland/src/plugins/PluginSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/devices/IPointer.hpp>
@@ -15,6 +17,7 @@
 #include <hyprland/src/config/values/types/IntValue.hpp>
 #include <hyprland/src/config/values/types/FloatValue.hpp>
 #include <hyprland/src/config/values/types/StringValue.hpp>
+#include <hyprland/src/config/values/types/IValue.hpp>
 
 
 
@@ -133,7 +136,7 @@ void onRender(eRenderStage renderStage) {
             const auto dragTarget = g_layoutManager->dragController() ? g_layoutManager->dragController()->target() : nullptr;
             const auto curWindow = dragTarget ? dragTarget->window() : nullptr;
             if (curWindow && widget->isActive()) {
-                g_oAlpha = curWindow->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->goal();
+                g_oAlpha = curWindow->effectiveAlpha();
                 curWindow->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setValueAndWarp(0);
             } else g_oAlpha = -1;
         } else g_oAlpha = -1;
@@ -146,10 +149,10 @@ void onRender(eRenderStage renderStage) {
                 const auto dragTarget = g_layoutManager->dragController() ? g_layoutManager->dragController()->target() : nullptr;
                 const auto curWindow = dragTarget ? dragTarget->window() : nullptr;
                 if (curWindow) {
-                    curWindow->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setValueAndWarp(Config::dragAlpha);
+                    curWindow->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setValueAndWarp(0);
                     const auto time = Time::steadyNow();
                     (*(tRenderWindow)pRenderWindow)(g_pHyprRenderer.get(), curWindow, widget->getOwner(), time, true, Render::RENDER_PASS_MAIN, false, false);
-                    curWindow->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setValueAndWarp(g_oAlpha);
+                    curWindow->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setValueAndWarp(0);
                 }
             }
             g_oAlpha = -1;
@@ -291,7 +294,7 @@ void onTouchDown(const ITouch::SDownEvent& event, SCallbackInfo& info) {
     targetMonitor = targetMonitor ? targetMonitor : g_pCompositor->getMonitorFromCursor();
 
     const auto widget = getWidgetForMonitor(targetMonitor);
-    if (widget != nullptr && targetMonitor != nullptr) {
+    if (widget != nullptr && targetMonitor.get() != nullptr) {
         if (widget->isActive()) {
             // v0.55.0 Fix: Use m_position and m_size
             Vector2D pos = targetMonitor->m_position + event.pos * targetMonitor->m_size;
@@ -316,7 +319,7 @@ void onTouchMove(const ITouch::SMotionEvent& event, SCallbackInfo& info) {
 
 void onTouchUp(const ITouch::SUpEvent& event, SCallbackInfo& info) {
     const auto widget = getWidgetForMonitor(g_pTouchedMonitor);
-    if (widget != nullptr && g_pTouchedMonitor != nullptr)
+    if (widget != nullptr && g_pTouchedMonitor.get() != nullptr)
         if (widget->isActive())
             info.cancelled = !widget->buttonEvent(false, g_pInputManager->getMouseCoordsInternal());
 
@@ -327,7 +330,7 @@ static SDispatchResult dispatchToggleOverview(std::string arg) {
     auto currentMonitor = g_pCompositor->getMonitorFromCursor();
     auto widget = getWidgetForMonitor(currentMonitor);
     if (widget) {
-        if (arg.contains("all")) {
+        if (arg.find("all") != std::string::npos) {
             if (widget->isActive()) {
                 for (auto& widget : g_overviewWidgets) {
                     if (widget != nullptr)
@@ -451,13 +454,11 @@ void reloadConfig() {
 
     // safely look up multi-workspace management plugin extensions
     auto numWorkspacesConfig = HyprlandAPI::getConfigValue(pHandle, "plugin:hyprsplit:num_workspaces");
-    
-    // Change .dataptr to .dataPtr
-    if (!numWorkspacesConfig || !numWorkspacesConfig->dataPtr)
+    if (!numWorkspacesConfig || !numWorkspacesConfig->dataPtr())
         numWorkspacesConfig = HyprlandAPI::getConfigValue(pHandle, "plugin:split-monitor-workspaces:count");
         
-    if (numWorkspacesConfig && numWorkspacesConfig->dataPtr)
-        numWorkspaces = *(int64_t*)numWorkspacesConfig->dataPtr;
+    if (numWorkspacesConfig && numWorkspacesConfig->dataPtr())
+        numWorkspaces = *(int64_t*)numWorkspacesConfig->dataPtr();
 
     // TODO: schedule frame for monitor?
 }

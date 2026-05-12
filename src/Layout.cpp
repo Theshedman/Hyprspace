@@ -1,35 +1,23 @@
 #include "Overview.hpp"
 #include "Globals.hpp"
 #include <hyprland/src/config/ConfigManager.hpp>
-#include <hyprland/src/managers/ConfigManager.hpp>
-// Fix for member and incomplete type errors:
 #include <hyprland/src/config/shared/workspace/WorkspaceRuleManager.hpp>
-#include <hyprland/src/config/legacy/ConfigManager.hpp>
+#include <hyprland/src/desktop/Workspace.hpp>
 
-// Helper to query rules via the specialized Rule Manager
-static SWorkspaceRule getRuleForWorkspace(PHLWORKSPACE pWorkspace) {
-    if (!pWorkspace) return SWorkspaceRule{};
+// Update the return type to include the Config:: namespace wrapper
+static Config::CWorkspaceRule getRuleForWorkspace(PHLWORKSPACE pWorkspace) {
+    if (!pWorkspace) 
+        return Config::CWorkspaceRule{};
 
-    // 1. Access the unified manager via g_pCompositor
-    auto& configMgr = g_pCompositor->m_pConfigManager;
-    
-    // 2. Query the rules directly from the manager
-    // In v0.55.0, both Lua and Legacy rules are merged into this internal list
-    const auto& rules = configMgr->getAllWorkspaceRules();
+    auto optRule = Config::workspaceRuleMgr()->getWorkspaceRuleFor(pWorkspace);
 
-    for (const auto& r : rules) {
-        // Match by workspace name or ID
-        if (r.workspaceString == pWorkspace->m_szName || r.workspaceString == std::to_string(pWorkspace->m_iID)) {
-            return r;
-        }
-    }
-
-    return SWorkspaceRule{};
+    return optRule.has_value() ? optRule.value() : Config::CWorkspaceRule{};
 }
 
-// FIXME: preserve original workspace rules
-void CHyprspaceWidget::updateLayout() {
 
+
+
+void CHyprspaceWidget::updateLayout() {
     if (!Config::affectStrut) return;
 
     const auto pMonitor = getOwner();
@@ -54,53 +42,49 @@ void CHyprspaceWidget::updateLayout() {
 
     g_pHyprRenderer->arrangeLayersForMonitor(ownerID);
 
-    // Get the Legacy manager specifically for string-based rule injection (The Hack)
-    auto legacyMgr = Config::Legacy::mgr().lock();
-    if (!legacyMgr) return;
-
     if (active) {
         const auto oActiveWorkspace = pMonitor->m_activeWorkspace;
         if (!oActiveWorkspace) return;
 
         for (auto& wsRef : g_pCompositor->getWorkspaces()) {
             auto ws = wsRef.lock();
-            // v0.55.0 Fix: Use ws->m_monitor->m_id and ws->m_id
+            // v0.55.0 Fix: Use unified structural naming
             if (ws && ws->m_monitor->m_id == ownerID && ws != oActiveWorkspace) {
                 const auto rule = getRuleForWorkspace(ws);
                 
-                std::string gapsInStr = rule.gapsIn.has_value() ? rule.gapsIn->toString() : PGAPSIN->toString();
-                std::string gapsOutStr = rule.gapsOut.has_value() ? rule.gapsOut->toString() : PGAPSOUT->toString();
+                std::string gapsInStr = rule.m_gapsIn.has_value() ? rule.m_gapsIn->toString() : PGAPSIN->toString();
+                std::string gapsOutStr = rule.m_gapsOut.has_value() ? rule.m_gapsOut->toString() : PGAPSOUT->toString();
 
-                const auto curRules = std::to_string(ws->m_id) + ", gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
+                const auto curRules = std::to_string(ws->m_id) + " gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
                 if (Config::overrideGaps) {
-                    legacyMgr->handleWorkspaceRules("", curRules);
+                    // Use the safe public plugin utility to execute commands down the runtime pipeline
+                    HyprlandAPI::invokeHyprctlCommand("keyword", "workspace " + curRules);
                 }
             }
         }
 
         const auto oActiveRule = getRuleForWorkspace(oActiveWorkspace);
-        std::string activeGapsIn = oActiveRule.gapsIn.has_value() ? oActiveRule.gapsIn->toString() : std::to_string(Config::gapsIn);
-        std::string activeGapsOut = oActiveRule.gapsOut.has_value() ? oActiveRule.gapsOut->toString() : std::to_string(Config::gapsOut);
+        std::string activeGapsIn = oActiveRule.m_gapsIn.has_value() ? oActiveRule.m_gapsIn->toString() : std::to_string(Config::gapsIn);
+        std::string activeGapsOut = oActiveRule.m_gapsOut.has_value() ? oActiveRule.m_gapsOut->toString() : std::to_string(Config::gapsOut);
 
-        const auto curRules = std::to_string(oActiveWorkspace->m_id) + ", gapsin:" + activeGapsIn + ", gapsout:" + activeGapsOut;
+        const auto curRules = std::to_string(oActiveWorkspace->m_id) + " gapsin:" + activeGapsIn + ", gapsout:" + activeGapsOut;
         if (Config::overrideGaps) {
-            legacyMgr->handleWorkspaceRules("", curRules);
+            HyprlandAPI::invokeHyprctlCommand("keyword", "workspace " + curRules);
         }
         
         g_layoutManager->recalculateMonitor(pMonitor);
-
     }
     else {
         for (auto& wsRef : g_pCompositor->getWorkspaces()) {
             auto ws = wsRef.lock();
             if (ws && ws->m_monitor->m_id == ownerID) {
                 const auto rule = getRuleForWorkspace(ws);
-                std::string gapsInStr = rule.gapsIn.has_value() ? rule.gapsIn->toString() : PGAPSIN->toString();
-                std::string gapsOutStr = rule.gapsOut.has_value() ? rule.gapsOut->toString() : PGAPSOUT->toString();
+                std::string gapsInStr = rule.m_gapsIn.has_value() ? rule.m_gapsIn->toString() : PGAPSIN->toString();
+                std::string gapsOutStr = rule.m_gapsOut.has_value() ? rule.m_gapsOut->toString() : PGAPSOUT->toString();
 
-                const auto curRules = std::to_string(ws->m_id) + ", gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
+                const auto curRules = std::to_string(ws->m_id) + " gapsin:" + gapsInStr + ", gapsout:" + gapsOutStr;
                 if (Config::overrideGaps) {
-                    legacyMgr->handleWorkspaceRules("", curRules);
+                    HyprlandAPI::invokeHyprctlCommand("keyword", "workspace " + curRules);
                 }
             }
         }
