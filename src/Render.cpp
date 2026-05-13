@@ -39,48 +39,69 @@ void renderBorder(CBox box, const Config::CGradientValueData& gradient, int size
 void renderWindowStub(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORKSPACE pWorkspaceOverride, CBox rectOverride, const Time::steady_tp& time) {
     if (!pWindow || !pMonitor || !pWorkspaceOverride) return;
 
-    Render::SRenderModifData renderModif;
-
     const auto oWorkspace = pWindow->m_workspace;
     const auto oFullscreen = pWindow->m_fullscreenState;
-    const auto oRealPosition = pWindow->m_position;
-    const auto oSize = pWindow->m_size;
     const auto oUseNearestNeighbor = pWindow->m_ruleApplicator->nearestNeighbor();
     const auto oPinned = pWindow->m_pinned;
     const auto oFloating = pWindow->m_isFloating;
+    const Vector2D oRealPosValue  = pWindow->m_realPosition->value();
+    const Vector2D oRealPosGoal   = pWindow->m_realPosition->goal();
+    const Vector2D oRealSizeValue = pWindow->m_realSize->value();
+    const Vector2D oRealSizeGoal  = pWindow->m_realSize->goal();
 
-    const float    logicalW = std::max((float)oSize.x, 5.F);
-    const float    scaleMod = rectOverride.w / std::max(logicalW * pMonitor->m_scale, 5.F);
-    const Vector2D logicalTL = oRealPosition + pWindow->m_floatingOffset;
-    const Vector2D scaledTL  = (logicalTL - pMonitor->m_position) * pMonitor->m_scale;
-    const Vector2D translate = rectOverride.pos() / scaleMod - scaledTL;
-
-    renderModif.modifs.push_back(std::make_pair(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_TRANSLATE, std::any(translate)));
-    renderModif.modifs.push_back(std::make_pair(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_SCALE, std::any(scaleMod)));
-    renderModif.enabled = true;
     pWindow->m_workspace = pWorkspaceOverride;
     pWindow->m_fullscreenState = Desktop::View::SFullscreenState{FSMODE_NONE};
     pWindow->m_ruleApplicator->nearestNeighbor().set(false, Desktop::Types::PRIORITY_SET_PROP);
     pWindow->m_isFloating = false;
     pWindow->m_pinned = true;
-    pWindow->m_ruleApplicator->rounding().set(pWindow->rounding() * scaleMod * pMonitor->m_scale, Desktop::Types::PRIORITY_SET_PROP);
 
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{.renderModif = renderModif}));
-    Hyprutils::Utils::CScopeGuard x([] {
-        g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{.renderModif = Render::SRenderModifData{}}));
-    });
+    // Pin m_realPosition/m_realSize directly to the thumbnail rect (in screen
+    // coordinates) instead of using a renderModif translate+scale to relocate
+    // a normally-positioned texture. The reason: ElementRenderer.cpp:318 sends
+    // damage = m_renderData.damage ∩ getTexBox() into the renderTexture call,
+    // and getTexBox() is the texture's *un-modif'd* box. A renderModif moves
+    // the actual pixel-write location, but the damage stays at the original
+    // box — so the renderModif-relocated pixels are outside the damage region
+    // and get culled. Pinning here makes getTexBox() equal the thumbnail rect,
+    // so damage covers it and the texture actually gets written.
+    pWindow->m_realPosition->setValueAndWarp(rectOverride.pos() + pMonitor->m_position);
+    pWindow->m_realSize->setValueAndWarp(rectOverride.size());
+
+    // standalone=true (below) forces renderdata.alpha/fadeAlpha to 1, but
+    // SurfacePassElement also multiplies in the surface's m_alphaModifier
+    // and m_overallOpacity. Pin those to 1 too so client-side opacity
+    // settings don't make the thumbnail invisible against the wallpaper.
+    const auto wlSurf = pWindow->wlSurface();
+    const float oAlphaModifier  = wlSurf ? wlSurf->m_alphaModifier  : 1.F;
+    const float oOverallOpacity = wlSurf ? wlSurf->m_overallOpacity : 1.F;
+    if (wlSurf) {
+        wlSurf->m_alphaModifier  = 1.F;
+        wlSurf->m_overallOpacity = 1.F;
+    }
 
     g_pHyprRenderer->damageWindow(pWindow);
 
-    (*(tRenderWindow)pRenderWindow)(g_pHyprRenderer.get(), pWindow, pMonitor, time, true, Render::RENDER_PASS_ALL, false, false);
+    // standalone=true (last arg) forces renderdata.alpha/fadeAlpha to 1 in
+    // Renderer.cpp:587-590, bypassing every window/workspace alpha multiplier.
+    // Hyprland's own decorations and rounding are also skipped, which is fine
+    // — the overview draws its own selection border.
+    (*(tRenderWindow)pRenderWindow)(g_pHyprRenderer.get(), pWindow, pMonitor, time, true, Render::RENDER_PASS_ALL, false, true);
 
     // restore values for normal window render
     pWindow->m_workspace = oWorkspace;
     pWindow->m_fullscreenState = oFullscreen;
-    pWindow->m_ruleApplicator->rounding().unset(Desktop::Types::PRIORITY_SET_PROP);
     pWindow->m_isFloating = oFloating;
     pWindow->m_pinned = oPinned;
-    pWindow->m_ruleApplicator->rounding().unset(Desktop::Types::PRIORITY_SET_PROP);
+    pWindow->m_realPosition->setValueAndWarp(oRealPosValue);
+    pWindow->m_realSize->setValueAndWarp(oRealSizeValue);
+    if (oRealPosValue != oRealPosGoal)
+        *pWindow->m_realPosition = oRealPosGoal;
+    if (oRealSizeValue != oRealSizeGoal)
+        *pWindow->m_realSize = oRealSizeGoal;
+    if (wlSurf) {
+        wlSurf->m_alphaModifier  = oAlphaModifier;
+        wlSurf->m_overallOpacity = oOverallOpacity;
+    }
 }
 
 void renderLayerStub(PHLLS pLayer, PHLMONITOR pMonitor, CBox rectOverride, const Time::steady_tp& time) {
