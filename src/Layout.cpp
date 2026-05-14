@@ -22,12 +22,20 @@ void CHyprspaceWidget::updateLayout() {
 
     const auto currentHeight = Config::panelHeight + Config::reservedArea;
 
-    // FIX: Safely retrieve layout integers without breaking on null custom pointers
-    static auto PGAPSIN_VALUE = CConfigValue<Hyprlang::INT>("general:gaps_in");
-    static auto PGAPSOUT_VALUE = CConfigValue<Hyprlang::INT>("general:gaps_out");
+    // general:gaps_in/gaps_out are CCssGapData (Hyprlang CUSTOMTYPE), not INT.
+    // Looking them up as INT trips ConfigValue.hpp:84's
+    // RASSERT("CConfigValue<Config::INTEGER> on a FUCKED type"), aborting
+    // Hyprland on the first config.reloaded event after monitor registration.
+    // Use the IComplexConfigValue pattern Hyprland itself uses in
+    // LayoutManager.cpp.
+    static auto PGAPSIN  = CConfigValue<Config::IComplexConfigValue>("general:gaps_in");
+    static auto PGAPSOUT = CConfigValue<Config::IComplexConfigValue>("general:gaps_out");
 
-    const std::string standardGapsIn = std::to_string(*PGAPSIN_VALUE);
-    const std::string standardGapsOut = std::to_string(*PGAPSOUT_VALUE);
+    const auto* pGapsIn  = (Config::CCssGapData*)PGAPSIN.ptr();
+    const auto* pGapsOut = (Config::CCssGapData*)PGAPSOUT.ptr();
+
+    const std::string standardGapsIn  = pGapsIn  ? pGapsIn->toString()  : "0";
+    const std::string standardGapsOut = pGapsOut ? pGapsOut->toString() : "0";
 
     if (active) {
         if (!Config::onBottom)
