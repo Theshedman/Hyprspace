@@ -384,6 +384,24 @@ static SDispatchResult dispatchCloseOverview(std::string arg) {
     return SDispatchResult{};
 }
 
+// Lua-config sessions can't reach legacy dispatchers, so the same
+// actions are also exposed as hl.plugin.hyprspace.{toggle,open,close}()
+// for binds and gestures in hyprland.lua.
+static int luaToggleOverview(lua_State*) {
+    dispatchToggleOverview("");
+    return 0;
+}
+
+static int luaOpenOverview(lua_State*) {
+    dispatchOpenOverview("");
+    return 0;
+}
+
+static int luaCloseOverview(lua_State*) {
+    dispatchCloseOverview("");
+    return 0;
+}
+
 void* findFunctionBySymbol(HANDLE inHandle, const std::string func, const std::string sym) {
     auto funcSearch = HyprlandAPI::findFunctionsByName(inHandle, func);
     for (auto f : funcSearch) {
@@ -625,6 +643,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addDispatcherV2(pHandle, "overview:toggle", ::dispatchToggleOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:open", ::dispatchOpenOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:close", ::dispatchCloseOverview);
+
+    // Registers under the Lua config manager only; returns false under
+    // hyprlang, where the dispatchers above cover every caller.
+    HyprlandAPI::addLuaFunction(pHandle, "hyprspace", "toggle", ::luaToggleOverview);
+    HyprlandAPI::addLuaFunction(pHandle, "hyprspace", "open", ::luaOpenOverview);
+    HyprlandAPI::addLuaFunction(pHandle, "hyprspace", "close", ::luaCloseOverview);
 
     g_pConfigReloadHook = Event::bus()->m_events.config.reloaded.listen([]() { reloadConfig(); });
     reloadConfig();
