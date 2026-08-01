@@ -52,9 +52,9 @@ void CHyprspaceWidget::updateLayout() {
         const auto oActiveWorkspace = pMonitor->m_activeWorkspace;
         if (!oActiveWorkspace) return;
 
-        for (auto& wsRef : g_pCompositor->getWorkspaces()) {
+        for (auto& wsRef : State::workspaceState()->workspaces()) {
             auto pWs = wsRef.lock();
-            if (!pWs || g_pCompositor->getWorkspaceByID(pWs->m_id) != pWs) continue;
+            if (!pWs || State::workspaceState()->query().id(pWs->m_id).run() != pWs) continue;
 
             if (pWs->monitorID() == ownerID && pWs != oActiveWorkspace) {
                 const auto rule = getRuleForWorkspace(pWs);
@@ -81,9 +81,9 @@ void CHyprspaceWidget::updateLayout() {
         g_layoutManager->recalculateMonitor(pMonitor);
     }
     else {
-        for (auto& wsRef : g_pCompositor->getWorkspaces()) {
+        for (auto& wsRef : State::workspaceState()->workspaces()) {
             auto pWs = wsRef.lock();
-            if (!pWs || g_pCompositor->getWorkspaceByID(pWs->m_id) != pWs) continue;
+            if (!pWs || State::workspaceState()->query().id(pWs->m_id).run() != pWs) continue;
 
             if (pWs->monitorID() == ownerID) {
                 const auto rule = getRuleForWorkspace(pWs);

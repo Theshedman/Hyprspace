@@ -14,8 +14,8 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     if (Config::overrideAnimSpeed > 0)
         curAnimation.internalSpeed = Config::overrideAnimSpeed;
 
-    g_pAnimationManager->createAnimation(0.F, curYOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
-    g_pAnimationManager->createAnimation(0.F, workspaceScrollOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
+    Animation::mgr()->createAnimation(0.F, curYOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
+    Animation::mgr()->createAnimation(0.F, workspaceScrollOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
     curYOffset->setValueAndWarp(Config::panelHeight);
     workspaceScrollOffset->setValueAndWarp(0);
 }
@@ -24,7 +24,7 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
 CHyprspaceWidget::~CHyprspaceWidget() {}
 
 PHLMONITOR CHyprspaceWidget::getOwner() {
-    return g_pCompositor->getMonitorFromID(ownerID);
+    return State::monitorState()->query().id(ownerID).run();
 }
 
 void CHyprspaceWidget::show() {
@@ -33,21 +33,22 @@ void CHyprspaceWidget::show() {
 
     if (prevFullscreen.empty()) {
         // unfullscreen all windows
-        for (auto& wsRef : g_pCompositor->getWorkspaces()) {
+        for (auto& wsRef : State::workspaceState()->workspaces()) {
             auto pWs = wsRef.lock();
             // Validate the workspace pointer is active and registered in the compositor map
-            if (!pWs || g_pCompositor->getWorkspaceByID(pWs->m_id) != pWs) 
+            if (!pWs || State::workspaceState()->query().id(pWs->m_id).run() != pWs)
                 continue;
 
             // Use pWs safely below this line
             if (pWs->monitorID() == ownerID) {
-                const auto w = pWs->getFullscreenWindow();
-                if (w != nullptr && pWs->m_fullscreenMode != FSMODE_NONE) {
+                const auto w = Fullscreen::controller()->getFullscreenWindow(pWs);
+                const auto fullscreenMode = Fullscreen::controller()->getFullscreenModes(pWs).internal;
+                if (w != nullptr && fullscreenMode != Fullscreen::FSMODE_NONE) {
                     // use fakefullscreenstate to preserve client's internal state
                     // fixes youtube fullscreen not restoring properly
-                    if (pWs->m_fullscreenMode == FSMODE_FULLSCREEN) w->m_wantsInitialFullscreen = true;
-                    prevFullscreen.emplace_back(std::make_tuple(PHLWINDOWREF(w), pWs->m_fullscreenMode));
-                    g_pCompositor->setWindowFullscreenState(w, Desktop::View::SFullscreenState{.internal = FSMODE_NONE, .client = FSMODE_NONE});
+                    if (fullscreenMode == Fullscreen::FSMODE_FULLSCREEN) w->m_wantsInitialFullscreen = true;
+                    prevFullscreen.emplace_back(std::make_tuple(PHLWINDOWREF(w), fullscreenMode));
+                    Fullscreen::controller()->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE);
                 }
             }
         }
@@ -56,17 +57,16 @@ void CHyprspaceWidget::show() {
     // hide top and overlay layers
     // FIXME: ensure input is disabled for hidden layers
     if (oLayerAlpha.empty() && Config::hideRealLayers) {
+        // v0.56.0 dropped CLayerSurface::m_fadingOut, so the alpha is all that hides them now
         for (auto& ls : owner->m_layerSurfaceLayers[2]) {
             //ls->startAnimation(false);
-            oLayerAlpha.emplace_back(std::make_tuple(ls.lock(), ls->m_alpha->goal()));
-            *ls->m_alpha = 0.f;
-            ls->m_fadingOut = true;
+            oLayerAlpha.emplace_back(std::make_tuple(ls.lock(), ls->alpha()[Desktop::View::LS_ALPHA_FADE]->goal()));
+            *ls->alpha()[Desktop::View::LS_ALPHA_FADE] = 0.f;
         }
         for (auto& ls : owner->m_layerSurfaceLayers[3]) {
             //ls->startAnimation(false);
-            oLayerAlpha.emplace_back(std::make_tuple(ls.lock(), ls->m_alpha->goal()));
-            *ls->m_alpha = 0.f;
-            ls->m_fadingOut = true;
+            oLayerAlpha.emplace_back(std::make_tuple(ls.lock(), ls->alpha()[Desktop::View::LS_ALPHA_FADE]->goal()));
+            *ls->alpha()[Desktop::View::LS_ALPHA_FADE] = 0.f;
         }
     }
 
@@ -80,7 +80,7 @@ void CHyprspaceWidget::show() {
 
     updateLayout();
     g_pHyprRenderer->damageMonitor(owner);
-    g_pCompositor->scheduleFrameForMonitor(owner);
+    owner->scheduleFrame();
 }
 
 void CHyprspaceWidget::hide() {
@@ -89,22 +89,18 @@ void CHyprspaceWidget::hide() {
 
     // restore layer state
     for (auto& ls : owner->m_layerSurfaceLayers[2]) {
-        if (!ls->m_readyToDelete && ls->m_mapped && ls->m_fadingOut) {
+        if (ls->m_mapped) {
             auto oAlpha = std::find_if(oLayerAlpha.begin(), oLayerAlpha.end(), [&] (const auto& tuple) {return std::get<0>(tuple) == ls;});
-            if (oAlpha != oLayerAlpha.end()) {
-                ls->m_fadingOut = false;
-                *ls->m_alpha = std::get<1>(*oAlpha);
-            }
+            if (oAlpha != oLayerAlpha.end())
+                *ls->alpha()[Desktop::View::LS_ALPHA_FADE] = std::get<1>(*oAlpha);
             //ls->startAnimation(true);
         }
     }
     for (auto& ls : owner->m_layerSurfaceLayers[3]) {
-        if (!ls->m_readyToDelete && ls->m_mapped && ls->m_fadingOut) {
+        if (ls->m_mapped) {
             auto oAlpha = std::find_if(oLayerAlpha.begin(), oLayerAlpha.end(), [&] (const auto& tuple) {return std::get<0>(tuple) == ls;});
-            if (oAlpha != oLayerAlpha.end()) {
-                ls->m_fadingOut = false;
-                *ls->m_alpha = std::get<1>(*oAlpha);
-            }
+            if (oAlpha != oLayerAlpha.end())
+                *ls->alpha()[Desktop::View::LS_ALPHA_FADE] = std::get<1>(*oAlpha);
             //ls->startAnimation(true);
         }
     }
@@ -115,8 +111,8 @@ void CHyprspaceWidget::hide() {
         const auto w = std::get<0>(fs).lock();
         if (!w) continue;
         const auto oFullscreenMode = std::get<1>(fs);
-        g_pCompositor->setWindowFullscreenState(w, Desktop::View::SFullscreenState(oFullscreenMode));
-        if (oFullscreenMode == FSMODE_FULLSCREEN) w->m_wantsInitialFullscreen = false;
+        Fullscreen::controller()->setFullscreenMode(w, oFullscreenMode, Fullscreen::FSMODE_NONE);
+        if (oFullscreenMode == Fullscreen::FSMODE_FULLSCREEN) w->m_wantsInitialFullscreen = false;
     }
     prevFullscreen.clear();
 
@@ -129,7 +125,7 @@ void CHyprspaceWidget::hide() {
     }
 
     updateLayout();
-    g_pCompositor->scheduleFrameForMonitor(owner);
+    owner->scheduleFrame();
 }
 
 void CHyprspaceWidget::updateConfig() {
@@ -142,8 +138,8 @@ void CHyprspaceWidget::updateConfig() {
     if (Config::overrideAnimSpeed > 0)
         curAnimation.internalSpeed = Config::overrideAnimSpeed;
 
-    g_pAnimationManager->createAnimation(0.F, curYOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
-    g_pAnimationManager->createAnimation(0.F, workspaceScrollOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
+    Animation::mgr()->createAnimation(0.F, curYOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
+    Animation::mgr()->createAnimation(0.F, workspaceScrollOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
     curYOffset->setValueAndWarp(Config::panelHeight);
     workspaceScrollOffset->setValueAndWarp(0);
 }

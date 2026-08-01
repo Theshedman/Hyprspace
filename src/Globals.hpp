@@ -12,10 +12,15 @@
 #include <hyprland/src/render/types.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
-#include <hyprland/src/managers/animation/AnimationManager.hpp>
+#include <hyprland/src/animation/AnimationManager.hpp>
 #include <hyprland/src/config/ConfigValue.hpp>
 #include <hyprland/src/helpers/time/Time.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/state/MonitorState.hpp>
+#include <hyprland/src/state/WorkspaceState.hpp>
+#include <hyprland/src/desktop/state/GlobalWindowController.hpp>
+#include <hyprland/src/pointer/PointerController.hpp>
+#include <hyprland/src/pointer/PointerManager.hpp>
 
 // Hyprland v0.54+: cancellable input uses Event::SCallbackInfo (not legacy CEvent*).
 using SCallbackInfo = Event::SCallbackInfo;
@@ -35,6 +40,11 @@ CHyprSignalListener listenCancellable(Signal& signal, std::function<void(const E
         auto* tup = static_cast<Tuple*>(args);
         handler(std::get<0>(*tup), std::get<1>(*tup));
     });
+}
+
+// v0.56.0: CCompositor lost getMonitorFromCursor(); this is the body it had.
+inline PHLMONITOR monitorFromCursor() {
+    return State::monitorState()->query().vec(Pointer::mgr()->position()).run();
 }
 
 inline HANDLE pHandle = NULL;
